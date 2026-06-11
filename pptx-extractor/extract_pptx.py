@@ -5,7 +5,6 @@ Usage:
 
 Options:
     --no-ocr            Skip OCR for images
-    --no-semantic       Skip semantic optimization
     -h, --help          Show this help message
 """
 
@@ -31,8 +30,6 @@ def parse_args():
                         help="Output directory (default: same as input)")
     parser.add_argument("--no-ocr", action="store_true",
                         help="Skip OCR for images")
-    parser.add_argument("--no-semantic", action="store_true",
-                        help="Skip semantic optimization")
 
     return parser.parse_args()
 
@@ -107,6 +104,7 @@ def install_dependencies():
     print("Checking dependencies...")
 
     for package in required_packages:
+        print(f"Checking {package}...")
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", package, "-q"],
             capture_output=True,
@@ -166,10 +164,11 @@ def get_slide_images(pptx_path: str) -> Dict[int, List[Tuple[str, int]]]:
         return {}
 
 
-def extract_images_to_output(pptx_path: str, output_dir: str) -> Tuple[Dict[str, str], Dict[int, List[str]]]:
+def extract_images_to_output(pptx_path: str, output_dir: str) -> Tuple[Dict[str, dict], Dict[int, List[str]]]:
     """
     提取PPTX中的图片到输出目录（改进版：按幻灯片索引命名）
-    返回: (原始文件名映射, 幻灯片→图片列表映射)
+    返回: (图片信息映射, 幻灯片→图片列表映射)
+    图片信息映射: {输出文件名: {'original': 原始文件名, 'path': 输出路径, 'size': 大小, 'slide_idx': 幻灯片索引}}
     """
     images_dir = os.path.join(output_dir, "images")
     
@@ -181,7 +180,7 @@ def extract_images_to_output(pptx_path: str, output_dir: str) -> Tuple[Dict[str,
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(images_dir, exist_ok=True)
 
-    # 建立原始文件名到输出路径的映射
+    # 建立图片信息映射（使用输出文件名为键，保证唯一性）
     image_map = {}
     
     # 建立幻灯片索引到图片列表的映射
@@ -217,7 +216,13 @@ def extract_images_to_output(pptx_path: str, output_dir: str) -> Tuple[Dict[str,
                     with open(output_path, 'wb') as f:
                         f.write(image_data)
                     
-                    image_map[original_name] = output_path
+                    # 存储完整的图片信息
+                    image_map[output_name] = {
+                        'original': original_name,
+                        'path': output_path,
+                        'size': len(image_data),
+                        'slide_idx': slide_idx
+                    }
                     slide_images.append(output_name)
             
             if slide_images:
@@ -238,15 +243,21 @@ def extract_images_to_output(pptx_path: str, output_dir: str) -> Tuple[Dict[str,
                     output_path = os.path.join(images_dir, original_name)
                     with open(output_path, 'wb') as f:
                         f.write(zf.read(name))
-                    image_map[original_name] = output_path
+                    image_map[original_name] = {
+                        'original': original_name,
+                        'path': output_path,
+                        'size': os.path.getsize(output_path),
+                        'slide_idx': None
+                    }
     
     return image_map, slide_to_images
 
 
-def fix_image_links(md_path: str, image_map: Dict[str, str], slide_to_images: Dict[int, List[str]] = None):
+def fix_image_links(md_path: str, image_map: Dict[str, dict], slide_to_images: Dict[int, List[str]] = None):
     """
     修复Markdown中的图片链接，将占位符替换为实际图片路径（改进版）
     :param slide_to_images: 幻灯片索引到图片列表的映射
+    :param image_map: 图片信息映射 {输出文件名: {'original': 原始文件名, 'path': 输出路径, ...}}
     """
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -301,19 +312,19 @@ def fix_image_links(md_path: str, image_map: Dict[str, str], slide_to_images: Di
                     matched_path = None
                     original_numbers = extract_numbers(original_name)
                     
-                    # 先尝试精确匹配
-                    for src_name, dest_path in image_map.items():
-                        if src_name.lower() == original_name.lower():
-                            matched_path = dest_path
+                    # 先尝试精确匹配（检查原始文件名）
+                    for output_name, image_info in image_map.items():
+                        if image_info['original'].lower() == original_name.lower():
+                            matched_path = image_info['path']
                             found = True
                             break
                     
                     # 如果精确匹配失败，尝试数字匹配
                     if not found and original_numbers:
-                        for src_name, dest_path in image_map.items():
-                            src_numbers = extract_numbers(src_name)
+                        for output_name, image_info in image_map.items():
+                            src_numbers = extract_numbers(image_info['original'])
                             if src_numbers == original_numbers:
-                                matched_path = dest_path
+                                matched_path = image_info['path']
                                 found = True
                                 break
                     
@@ -337,17 +348,19 @@ def fix_image_links(md_path: str, image_map: Dict[str, str], slide_to_images: Di
             matched_path = None
             original_numbers = extract_numbers(original_name)
             
-            for src_name, dest_path in image_map.items():
-                if src_name.lower() == original_name.lower():
-                    matched_path = dest_path
+            # 先尝试精确匹配（检查原始文件名）
+            for output_name, image_info in image_map.items():
+                if image_info['original'].lower() == original_name.lower():
+                    matched_path = image_info['path']
                     found = True
                     break
             
+            # 如果精确匹配失败，尝试数字匹配
             if not found and original_numbers:
-                for src_name, dest_path in image_map.items():
-                    src_numbers = extract_numbers(src_name)
+                for output_name, image_info in image_map.items():
+                    src_numbers = extract_numbers(image_info['original'])
                     if src_numbers == original_numbers:
-                        matched_path = dest_path
+                        matched_path = image_info['path']
                         found = True
                         break
             
@@ -368,6 +381,8 @@ def ocr_image(img_path: str) -> Optional[str]:
     """Perform OCR on a single image using easyocr."""
     try:
         import easyocr
+        import numpy as np
+        import cv2
 
         # 初始化easyocr阅读器（中文+英文）
         reader = easyocr.Reader(['ch_sim', 'en'], verbose=False)
@@ -376,8 +391,17 @@ def ocr_image(img_path: str) -> Optional[str]:
         if ext == '.emf':
             return None
 
-        # 使用easyocr识别图片
-        result = reader.readtext(img_path)
+        # 使用numpy读取图片（解决OpenCV不支持中文路径的问题）
+        with open(img_path, 'rb') as f:
+            img_array = np.frombuffer(f.read(), dtype=np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            print(f"Warning: Failed to decode image: {img_path}", file=sys.stderr)
+            return None
+
+        # 使用easyocr识别图片（传入numpy数组而非路径）
+        result = reader.readtext(img)
         
         # 提取所有识别到的文本并拼接
         text = ' '.join([item[1] for item in result])
@@ -399,11 +423,11 @@ def ocr_image(img_path: str) -> Optional[str]:
 
 
 def insert_ocr_results(md_path: str, ocr_results: Dict[str, str], 
-                       slide_images: Dict[int, List[Tuple[str, int]]], 
-                       image_info_map: Dict[str, Tuple[str, int]],
+                       slide_to_images: Dict[int, List[str]], 
                        optimizer: SemanticOptimizer):
     """
     将OCR结果插入到对应的幻灯片位置（改进版）
+    :param slide_to_images: 幻灯片索引到输出文件名列表的映射
     """
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -428,50 +452,15 @@ def insert_ocr_results(md_path: str, ocr_results: Dict[str, str],
                 i += 1
             
             # 检查是否有该幻灯片的图片OCR结果
-            if slide_num in slide_images:
+            if slide_num in slide_to_images:
                 slide_ocr = []
-                for image_name, expected_size in slide_images[slide_num]:
+                for image_name in slide_to_images[slide_num]:
                     # 查找对应的OCR结果
-                    found = False
-                    matched_ocr_name = None
-                    
-                    # 尝试按文件名匹配（支持新的slide_{idx}_{shape}.ext格式）
-                    for ocr_img_name, ocr_text in ocr_results.items():
-                        if image_name.lower() == ocr_img_name.lower():
-                            matched_ocr_name = ocr_img_name
-                            found = True
-                            break
-                    
-                    # 如果文件名不匹配，尝试按幻灯片索引匹配（新格式）
-                    if not found:
-                        # 检查是否是slide_N格式的图片
-                        slide_pattern = re.compile(r'slide_(\d+)_')
-                        ocr_match = slide_pattern.match(image_name)
-                        if ocr_match and int(ocr_match.group(1)) == slide_num:
-                            # 在ocr_results中查找相同幻灯片的图片
-                            for ocr_img_name, ocr_text in ocr_results.items():
-                                if ocr_img_name.startswith(f'slide_{slide_num}_'):
-                                    matched_ocr_name = ocr_img_name
-                                    found = True
-                                    break
-                    
-                    # 如果文件名不匹配，尝试按大小匹配（旧格式兼容）
-                    if not found:
-                        for ocr_img_name, ocr_text in ocr_results.items():
-                            if ocr_img_name in image_info_map:
-                                _, actual_size = image_info_map[ocr_img_name]
-                                if abs(actual_size - expected_size) < 100:
-                                    matched_ocr_name = ocr_img_name
-                                    found = True
-                                    break
-                    
-                    if found and matched_ocr_name:
-                        ocr_text = ocr_results[matched_ocr_name]
+                    if image_name in ocr_results:
+                        ocr_text = ocr_results[image_name]
                         optimized_text = optimizer.optimize_image_ocr(ocr_text)
                         if optimized_text:
-                            slide_ocr.append(f"**图片OCR [{matched_ocr_name}]**\n\n{optimized_text}")
-                    elif image_name.lower().endswith('.emf'):
-                        continue
+                            slide_ocr.append(f"**图片OCR [{image_name}]**\n\n{optimized_text}")
                     else:
                         slide_ocr.append(f"**图片：{image_name}**\n\n（无文字内容）")
                 
@@ -495,7 +484,7 @@ def insert_ocr_results(md_path: str, ocr_results: Dict[str, str],
 
 
 def extract_pptx_to_markdown(pptx_path: str, output_dir: str = None, 
-                              skip_ocr: bool = False, skip_semantic: bool = False):
+                              skip_ocr: bool = False):
     """
     Extract PPTX content to Markdown with image OCR.
     Output is placed in a folder with the same name as the PPTX file.
@@ -537,32 +526,33 @@ def extract_pptx_to_markdown(pptx_path: str, output_dir: str = None,
     fix_image_links(str(output_md), image_map, slide_to_images)
 
     if not skip_ocr:
-        # 获取幻灯片与图片的对应关系
-        print("Mapping images to slides...")
-        slide_images = get_slide_images(str(pptx_path))
-        print(f"Found images in {len(slide_images)} slides")
-
         # 构建图片信息映射（用于OCR）
         image_info_map = {}
-        for img_name, img_path in image_map.items():
+        for output_name, image_info in image_map.items():
+            img_path = image_info['path']
             if os.path.exists(img_path):
-                image_info_map[img_name] = (img_path, os.path.getsize(img_path))
+                image_info_map[output_name] = {
+                    'path': img_path,
+                    'size': image_info['size'],
+                    'original': image_info['original'],
+                    'slide_idx': image_info['slide_idx']
+                }
 
         if image_info_map:
             print("Performing OCR on images...")
             ocr_results = {}
-            for img_name, (img_path, _) in image_info_map.items():
-                print(f"OCR: {img_name}")
-                ocr_text = ocr_image(img_path)
+            for output_name, info in image_info_map.items():
+                print(f"OCR: {output_name}")
+                ocr_text = ocr_image(info['path'])
                 if ocr_text:
-                    ocr_results[img_name] = ocr_text
+                    ocr_results[output_name] = ocr_text
 
             # 创建语义优化器
             optimizer = SemanticOptimizer()
 
             # 将OCR结果插入到对应的幻灯片位置
             print("Inserting OCR results into slides...")
-            insert_ocr_results(str(output_md), ocr_results, slide_images, image_info_map, optimizer)
+            insert_ocr_results(str(output_md), ocr_results, slide_to_images, optimizer)
     else:
         print("OCR disabled")
 
@@ -577,8 +567,7 @@ def main():
         extract_pptx_to_markdown(
             args.pptx_file,
             args.output_dir,
-            args.no_ocr,
-            args.no_semantic
+            args.no_ocr
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

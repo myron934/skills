@@ -1,0 +1,8 @@
+[project]
+name = "skills"
+python_venv = ".venv"
+
+[tool.python]
+venv_path = ".venv"
+python_path = ".venv/Scripts/python.exe"
+pip_path = ".venv/Scripts/pip.exe"
