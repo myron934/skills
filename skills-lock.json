@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "pptx-to-md": {
+      "source": "myron934/skills",
+      "sourceType": "github",
+      "skillPath": "pptx-to-md/SKILL.md",
+      "computedHash": "fb95843f4bec5fa6085ed1053889e6a96e2bde019abf3e19fd2169f5aa2883c6"
+    }
+  }
+}
