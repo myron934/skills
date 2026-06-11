@@ -2,4 +2,4 @@ input/
 output/
 __pycache__/
 .trae/
-.agent/
+.agents/
