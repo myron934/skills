@@ -4,7 +4,7 @@ AI Agent 技能仓库，存放各种实用工具和自动化脚本。
 
 ## 包含的 Skills
 
-### [pptx-to-md](./.trae/skills/pptx-to-md/)
+### [pptx-to-md](./pptx-to-md/)
 
 将 PPTX 文件解析为 Markdown 格式，支持图片提取和 OCR 文字识别。
 
@@ -24,14 +24,9 @@ AI Agent 技能仓库，存放各种实用工具和自动化脚本。
 
 ```
 skills/
-├── .trae/
-│   └── skills/
-│       └── pptx-to-md/       # PPTX 转 Markdown Skill
-│           ├── SKILL.md      # Skill 定义文件
-│           └── extract_pptx.py
-├── pptx-to-md/               # 开发目录（源文件）
-│   ├── SKILL.md
-│   └── extract_pptx.py
+├── pptx-to-md/               # PPTX 转 Markdown Skill
+│   ├── SKILL.md             # Skill 定义文件（含 frontmatter）
+│   └── extract_pptx.py      # 主脚本
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
@@ -39,16 +34,23 @@ skills/
 
 ## 安装 Skill
 
-### 方法 1：复制到 Trae 全局 Skills 目录
+### 使用 npx 安装（推荐）
 
-```powershell
-# 复制到 Trae 全局目录
-Copy-Item -Recurse -Force ".trae\skills\pptx-to-md" "$env:USERPROFILE\.trae-cn\builtin\global\skills\"
+```bash
+npx skills add https://github.com/myron934/skills --skill pptx-to-md
 ```
 
-### 方法 2：在项目中使用
+### 手动安装
 
-将 `.trae/skills/` 目录保留在项目中，Trae 会自动识别项目级别的 Skills。
+复制到 Claude/Trae 的 skills 目录：
+
+```powershell
+# Claude
+Copy-Item -Recurse -Force "pptx-to-md" "$env:USERPROFILE\.claude\skills\"
+
+# Trae
+Copy-Item -Recurse -Force "pptx-to-md" "$env:USERPROFILE\.trae-cn\builtin\global\skills\"
+```
 
 ## 使用方式
 
@@ -72,8 +74,8 @@ AI：[自动调用 pptx-to-md skill]
 
 ### 添加新 Skill
 
-1. 在 `.trae/skills/` 目录创建新文件夹（如 `new-skill/`）
-2. 创建 `SKILL.md` 文件，包含 frontmatter：
+1. 在仓库根目录创建新文件夹（如 `new-skill/`）
+2. 创建 `SKILL.md` 文件，**必须包含 frontmatter**：
 
 ```markdown
 ---
@@ -88,6 +90,7 @@ description: "Skill 功能描述。Invoke when 触发条件。"
 
 3. 添加脚本文件
 4. 更新本 README
+5. 提交到 Git
 
 ### Skill 文件格式要求
 

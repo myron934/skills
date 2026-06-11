@@ -1,3 +1,8 @@
+---
+name: "pptx-to-md"
+description: "Converts PPTX files to Markdown with image extraction and OCR. Invoke when user wants to convert/extract PPT/PPTX content to Markdown or needs to extract text from PowerPoint files."
+---
+
 # PPTX to Markdown Skill
 
 将PPTX文件解析为Markdown格式，支持图片提取和OCR文字识别。
